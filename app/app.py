@@ -32,7 +32,7 @@ st.divider()
 # --- Section 2: Manual lookup (ground truth checker) ---
 st.header("Manual lookup (verify the AI's answers)")
 
-conn = sqlite3.connect("boroondara_census.db")
+conn = sqlite3.connect("data/boroondara_census.db")
 cursor = conn.cursor()
 
 cursor.execute("SELECT DISTINCT category FROM census_data ORDER BY category")

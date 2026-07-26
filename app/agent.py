@@ -7,7 +7,7 @@ load_dotenv()
 client = anthropic.Anthropic()
 
 def query_census(category: str, subcategory: str) -> list:
-    conn = sqlite3.connect("boroondara_census.db")
+    conn = sqlite3.connect("data/boroondara_census.db")
     cursor = conn.cursor()
     cursor.execute(
         "SELECT year, value FROM census_data WHERE category = ? AND subcategory = ? ORDER BY year",
@@ -19,7 +19,7 @@ def query_census(category: str, subcategory: str) -> list:
 
 
 def get_schema_summary():
-    conn = sqlite3.connect("boroondara_census.db")
+    conn = sqlite3.connect("data/boroondara_census.db")
     cursor = conn.cursor()
     cursor.execute("SELECT DISTINCT category, subcategory FROM census_data ORDER BY category, subcategory")
     rows = cursor.fetchall()

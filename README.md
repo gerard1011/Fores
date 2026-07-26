@@ -15,7 +15,18 @@ Loads into a normalized `census_data` table: (lga, year, category,
 Idempotent safe to re-run without duplicating data
 
 ### Usage
-python3 census_script.py
+python3 pipeline/boroondara.py
 
 ### Data source
 Australian Bureau of Statistics, 2021 Census Time Series Profile
+
+## Running the app
+
+```
+make build
+make up
+```
+
+Then open http://localhost:8501. Requires a `.env` file in the project root with `ANTHROPIC_API_KEY` set.
+
+Other commands: `make down`, `make logs`, `make restart`, `make freeze` (regenerate `requirements.txt` from the built image).
