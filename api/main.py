@@ -117,6 +117,17 @@ async def categories(request: Request) -> list[dict]:
 
 
 @app.get(
+    "/api/datasets/census/subcategories",
+    response_model=list[schemas.SubcategoryRef],
+    responses=ERRORS,
+)
+async def subcategories(request: Request) -> list[dict]:
+    """Flat name index backing the explorer's search box."""
+    await limiter.check_rate(client_ip(request), per_minute=config.CENSUS_PER_MINUTE)
+    return db.list_subcategories()
+
+
+@app.get(
     "/api/datasets/census/series",
     response_model=schemas.CategorySeries,
     responses={**ERRORS, **NOT_FOUND},

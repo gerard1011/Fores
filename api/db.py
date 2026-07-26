@@ -48,6 +48,22 @@ def list_categories(path: Path | None = None) -> list[dict]:
     return [dict(r) for r in rows]
 
 
+def list_subcategories(path: Path | None = None) -> list[dict]:
+    """Every (category, subcategory) pair — the explorer's search index.
+
+    Names only, no values: ~262 rows and a few KB, which is what makes a single
+    up-front request reasonable where fetching all the data would not be. If
+    this ever outgrows one payload, add a `q=` parameter and filter server-side
+    rather than going back to loading everything.
+    """
+    with _connect(path) as conn:
+        rows = conn.execute(
+            "SELECT DISTINCT category, subcategory FROM census_data "
+            "ORDER BY category, subcategory"
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
 def category_series(category: str, path: Path | None = None) -> list[dict]:
     """Every (subcategory, year, value) triple for one category."""
     with _connect(path) as conn:

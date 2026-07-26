@@ -21,10 +21,15 @@ Australian Bureau of Statistics, 2021 Census Time Series Profile
 
 ```
 api/       FastAPI service — the agent and the census endpoints
-web/       React frontend (added in a later commit)
+web/       React frontend — Vite, TypeScript, Tailwind, Recharts
 pipeline/  offline ETL from the ABS spreadsheets into SQLite
 data/      the SQLite database — gitignored, bind-mounted into the container
 ```
+
+The UI is two linked panes. Ask a question on the left and the answer streams in
+with its tool calls shown as expandable steps; click one and the explorer on the
+right jumps to that category with the cited subcategory highlighted, so an
+answer and the data behind it are on screen together.
 
 ## Prerequisites
 
@@ -60,16 +65,40 @@ make down
 Other commands: `make logs`, `make restart`, `make test`, `make freeze`
 (regenerate `requirements.txt` from the built image).
 
+## Frontend development
+
+The React app lives in `web/`. In dev it runs on its own server and proxies
+`/api` to FastAPI, so the app talks to the same paths in dev and production and
+there is no CORS config or base URL to manage.
+
+```
+.venv/Scripts/python -m uvicorn api.main:app --port 8000
+npm --prefix web run dev
+```
+
+Then open http://localhost:5173.
+
+`make types` regenerates `web/src/api/schema.d.ts` from FastAPI's OpenAPI
+schema. Run it after changing any Pydantic model — a renamed field then breaks
+the frontend build instead of production. Note the SSE event shapes are the one
+thing generation cannot cover: they are declared in `web/src/api/events.ts` and
+mirror the docstring on `agent.stream_ask` by hand.
+
+TypeScript is pinned to 5.x deliberately. TypeScript 7 (the native compiler)
+does not expose the `ts.factory` API that `openapi-typescript` builds on, so
+type generation breaks on it.
+
 ## Tests
 
 ```
 py -m venv .venv
 .venv/Scripts/python -m pip install -r requirements.txt -r requirements-dev.txt
-make test
+make test              # backend
+npm --prefix web test  # frontend
 ```
 
-Tests build their own small database, so they do not depend on the gitignored
-one being present.
+Backend tests build their own small database, so they do not depend on the
+gitignored one being present.
 
 ## Rate limits
 

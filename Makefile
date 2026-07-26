@@ -25,6 +25,8 @@ test:
 
 # Regenerates web/src/api/schema.d.ts from FastAPI's OpenAPI schema, so a
 # renamed Pydantic field breaks the frontend build instead of production.
-# Wired up in the commit that adds web/.
+# Generated from the app object directly — no server needs to be running.
 types:
-	@echo "Not yet — added with the React app."
+	.venv/Scripts/python -c "import json; from api.main import app; print(json.dumps(app.openapi()))" > web/openapi.json
+	cd web && npx --yes openapi-typescript openapi.json -o src/api/schema.d.ts
+	rm -f web/openapi.json

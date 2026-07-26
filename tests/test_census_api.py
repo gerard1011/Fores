@@ -87,3 +87,21 @@ async def test_error_response_reaches_the_openapi_schema(client):
     for path in ("/api/chat", "/api/datasets/census/categories"):
         content = schema["paths"][path].popitem()[1]["responses"]["429"]["content"]
         assert content["application/json"]["schema"]["$ref"] == ref
+
+
+async def test_subcategories_index_pairs_every_name_with_its_category(client):
+    resp = await client.get("/api/datasets/census/subcategories")
+    assert resp.status_code == 200
+
+    pairs = {(r["category"], r["subcategory"]) for r in resp.json()}
+    assert pairs == {
+        ("population", "total"),
+        ("dwelling_structure", "separate house"),
+        ("dwelling_structure", "flat or apartment"),
+    }
+
+
+async def test_subcategories_index_carries_no_values(client):
+    """Names only — this is what keeps a single up-front request defensible."""
+    rows = (await client.get("/api/datasets/census/subcategories")).json()
+    assert all(set(r) == {"category", "subcategory"} for r in rows)

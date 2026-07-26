@@ -18,6 +18,11 @@ class Category(BaseModel):
     )
 
 
+class SubcategoryRef(BaseModel):
+    category: str
+    subcategory: str
+
+
 class SeriesPoint(BaseModel):
     subcategory: str
     year: int
