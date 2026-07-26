@@ -38,7 +38,14 @@ WEB_DIST = Path(os.environ.get("WEB_DIST", REPO_ROOT / "web" / "dist"))
 
 # --- Model ----------------------------------------------------------------
 MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-4-5")
-MAX_TOKENS = _int("ANTHROPIC_MAX_TOKENS", 1024)
+
+# A ceiling, not a target — output is billed per token actually generated, so
+# headroom is free. It has to cover the tool_use blocks as well as the prose:
+# asking about a 15-bracket category makes the model emit 15 query_census calls
+# in one turn, and at the previous value of 1024 it ran out mid-generation,
+# returning stop_reason "max_tokens" with zero usable tool calls. Since
+# responses stream, a large value carries no timeout risk either.
+MAX_TOKENS = _int("ANTHROPIC_MAX_TOKENS", 8192)
 
 # --- Rate limits ----------------------------------------------------------
 CHAT_PER_MINUTE = _int("CHAT_PER_MINUTE", 10)

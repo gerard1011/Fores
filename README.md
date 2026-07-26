@@ -139,3 +139,15 @@ between requests, or a model change — cache minimums are model-specific, and t
 note on `config.MODEL` explains why the model is pinned.
 
 Set `LOG_LEVEL=WARNING` to quieten it.
+
+A turn that ends before it finished logs a warning:
+
+```
+api.agent: turn ended early: stop_reason=max_tokens
+```
+
+`max_tokens` means the answer was cut off mid-generation and the user was told
+so. The budget (`ANTHROPIC_MAX_TOKENS`, default 8192) has to cover the tool calls
+as well as the prose — asking about a 15-bracket category makes the model emit 15
+`query_census` calls in a single turn. If this starts appearing regularly, raise
+it rather than assuming the model is being verbose.
