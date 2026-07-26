@@ -2,6 +2,10 @@ services:
   app:
     build: .
     ports:
-      - "8501:8501"
+      - "8000:8000"
     env_file:
       - .env
+    volumes:
+      # Read-only so a bug cannot write to the source database, and so
+      # refreshing the data needs no rebuild.
+      - ./data:/app/data:ro

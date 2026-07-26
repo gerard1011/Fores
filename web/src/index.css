@@ -1,0 +1,185 @@
+@import "tailwindcss";
+
+/* Chart and surface tokens.
+ *
+ * The three year steps are an ORDINAL ramp — one hue, light→dark — because
+ * 2011/2016/2021 are ordered. Categorical hues would imply the years are
+ * unrelated identities. Steps validated in both modes (monotone lightness,
+ * >=0.06 lightness gaps, single hue, light end clear of the surface).
+ *
+ * Dark values are declared twice on purpose: the media query follows the OS,
+ * the data-theme scope follows an explicit toggle, and the toggle has to win
+ * in both directions.
+ */
+:root {
+  color-scheme: light;
+
+  --surface-1: #fcfcfb;
+  --page: #f9f9f7;
+  --text-primary: #0b0b0b;
+  --text-secondary: #52514e;
+  --text-muted: #898781;
+  --gridline: #e1e0d9;
+  --baseline: #c3c2b7;
+  --hairline: rgba(11, 11, 11, 0.1);
+  --wash: rgba(11, 11, 11, 0.04);
+
+  --year-2011: #86b6ef;
+  --year-2016: #3987e5;
+  --year-2021: #184f95;
+
+  --accent: #2a78d6;
+  --critical: #d03b3b;
+  --warning: #fab219;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) {
+    color-scheme: dark;
+
+    --surface-1: #1a1a19;
+    --page: #0d0d0d;
+    --text-primary: #ffffff;
+    --text-secondary: #c3c2b7;
+    --text-muted: #898781;
+    --gridline: #2c2c2a;
+    --baseline: #383835;
+    --hairline: rgba(255, 255, 255, 0.1);
+    --wash: rgba(255, 255, 255, 0.06);
+
+    --year-2011: #9ec5f4;
+    --year-2016: #3987e5;
+    --year-2021: #184f95;
+
+    --accent: #3987e5;
+    --critical: #e66767;
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --surface-1: #1a1a19;
+  --page: #0d0d0d;
+  --text-primary: #ffffff;
+  --text-secondary: #c3c2b7;
+  --text-muted: #898781;
+  --gridline: #2c2c2a;
+  --baseline: #383835;
+  --hairline: rgba(255, 255, 255, 0.1);
+  --wash: rgba(255, 255, 255, 0.06);
+
+  --year-2011: #9ec5f4;
+  --year-2016: #3987e5;
+  --year-2021: #184f95;
+
+  --accent: #3987e5;
+  --critical: #e66767;
+}
+
+@theme inline {
+  --color-surface: var(--surface-1);
+  --color-page: var(--page);
+  --color-ink: var(--text-primary);
+  --color-ink-secondary: var(--text-secondary);
+  --color-ink-muted: var(--text-muted);
+  --color-gridline: var(--gridline);
+  --color-baseline: var(--baseline);
+  --color-hairline: var(--hairline);
+  --color-wash: var(--wash);
+  --color-accent: var(--accent);
+  --color-critical: var(--critical);
+  --font-sans: system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+/* Not height:100% — that would trap the stacked mobile layout inside one
+ * viewport and hide the overflow. The app pins itself to the viewport at lg
+ * and lets the page scroll below it. */
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  background: var(--page);
+  color: var(--text-primary);
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Answers arrive as markdown. Scoped here rather than sprinkled through the
+ * component so the prose rules live in one place. */
+.prose-answer > :first-child {
+  margin-top: 0;
+}
+.prose-answer > :last-child {
+  margin-bottom: 0;
+}
+.prose-answer p {
+  margin: 0.5rem 0;
+  line-height: 1.6;
+}
+.prose-answer ul,
+.prose-answer ol {
+  margin: 0.5rem 0;
+  padding-left: 1.25rem;
+}
+.prose-answer ul {
+  list-style: disc;
+}
+.prose-answer ol {
+  list-style: decimal;
+}
+.prose-answer li {
+  margin: 0.2rem 0;
+}
+.prose-answer strong {
+  font-weight: 600;
+}
+.prose-answer code {
+  font-size: 0.875em;
+  background: var(--wash);
+  padding: 0.1em 0.35em;
+  border-radius: 4px;
+}
+.prose-answer table {
+  border-collapse: collapse;
+  margin: 0.5rem 0;
+  font-variant-numeric: tabular-nums;
+}
+.prose-answer th,
+.prose-answer td {
+  border: 1px solid var(--hairline);
+  padding: 0.25rem 0.5rem;
+  text-align: left;
+}
+
+/* The caret that trails streaming text, so an in-flight answer is visibly
+ * still arriving rather than looking finished-but-short. */
+@keyframes caret {
+  0%,
+  45% {
+    opacity: 1;
+  }
+  55%,
+  100% {
+    opacity: 0.15;
+  }
+}
+.streaming-caret {
+  display: inline-block;
+  width: 0.45em;
+  height: 1em;
+  margin-left: 1px;
+  vertical-align: text-bottom;
+  background: var(--accent);
+  border-radius: 1px;
+  animation: caret 1s steps(1, end) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .streaming-caret {
+    animation: none;
+  }
+}

@@ -1,3 +1,11 @@
 .claude
 boroondara_census.db
 .env
+.venv
+__pycache__/
+*.pyc
+.pytest_cache/
+node_modules/
+web/dist/
+web/openapi.json
+web/*.tsbuildinfo
