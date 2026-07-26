@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import Markdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { AlertCircle, ArrowUp, Clock, Square } from "lucide-react";
 import type { AssistantMessage, Cooldown, Message } from "@/hooks/useChat";
 import { ToolChip, type Citation } from "./ToolChip";
@@ -39,7 +40,12 @@ export function ChatPane({
   return (
     <section
       aria-label="Ask a question"
-      className="flex min-h-[26rem] flex-col rounded-lg border border-hairline bg-surface lg:min-h-0"
+      // min-w-0 is load-bearing: as a grid item this defaults to
+      // min-width:auto, which refuses to shrink below its content's
+      // min-content width. Wide content (a markdown table) would then push the
+      // whole page sideways and the inner overflow container would never
+      // engage.
+      className="flex min-h-[26rem] min-w-0 flex-col rounded-lg border border-hairline bg-surface lg:min-h-0"
     >
       <header className="border-b border-hairline px-4 py-3">
         <h2 className="text-sm font-semibold">Ask</h2>
@@ -144,7 +150,28 @@ function AssistantBubble({
 
       {message.text && (
         <div className="prose-answer text-sm">
-          <Markdown>{message.text}</Markdown>
+          {/*
+            remark-gfm is required for tables, which the model reaches for
+            readily when asked for a breakdown. Tables are a GitHub Flavored
+            Markdown extension, not core Markdown — without this plugin
+            react-markdown parses the whole table as one paragraph, and HTML
+            collapses its newlines into spaces, so it renders as a single
+            run-on line. It also brings strikethrough and autolinks.
+          */}
+          <Markdown
+            remarkPlugins={[remarkGfm]}
+            components={{
+              // A breakdown table is wider than this pane. It scrolls inside
+              // its own container so the page itself never scrolls sideways.
+              table: ({ children, ...props }) => (
+                <div className="-mx-1 overflow-x-auto px-1">
+                  <table {...props}>{children}</table>
+                </div>
+              ),
+            }}
+          >
+            {message.text}
+          </Markdown>
           {message.streaming && <span className="streaming-caret" aria-hidden />}
         </div>
       )}

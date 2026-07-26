@@ -143,16 +143,38 @@ body {
   padding: 0.1em 0.35em;
   border-radius: 4px;
 }
+/* Requires remark-gfm to be enabled, or none of this applies — tables are a
+ * GFM extension and core Markdown renders them as a paragraph. */
 .prose-answer table {
   border-collapse: collapse;
   margin: 0.5rem 0;
+  font-size: 0.9em;
+  /* Numbers in a breakdown line up column-to-column. */
   font-variant-numeric: tabular-nums;
+}
+.prose-answer thead th {
+  border-bottom: 1px solid var(--baseline);
+  color: var(--text-secondary);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.prose-answer tbody tr {
+  border-bottom: 1px solid var(--hairline);
 }
 .prose-answer th,
 .prose-answer td {
-  border: 1px solid var(--hairline);
-  padding: 0.25rem 0.5rem;
+  padding: 0.3rem 0.6rem;
   text-align: left;
+}
+/* GFM alignment markers (|---:|) become inline styles; honour them so a model
+ * that right-aligns its numeric columns gets what it asked for. */
+.prose-answer th[align="right"],
+.prose-answer td[align="right"] {
+  text-align: right;
+}
+.prose-answer th[align="center"],
+.prose-answer td[align="center"] {
+  text-align: center;
 }
 
 /* The caret that trails streaming text, so an in-flight answer is visibly
