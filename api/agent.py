@@ -86,6 +86,28 @@ TOOL_IMPLS = {
 # census years never needs anywhere near this many round trips.
 MAX_TOOL_ITERATIONS = 10
 
+# Why the answer stopped, when it stopped for a reason worth telling the user
+# about. Anything not listed here and not "tool_use" is treated as a normal
+# finish. The failure this guards against: a turn cut off mid-generation used to
+# be reported as a completed one, so the UI showed the model's "I'll retrieve
+# that now…" preamble as if it were the whole answer.
+INTERRUPTED_STOP_REASONS = {
+    "max_tokens": (
+        "The answer was cut off because it got too long. Try asking about a "
+        "narrower slice of the data.",
+        True,
+    ),
+    "model_context_window_exceeded": (
+        "This conversation has grown too long for the model to process. Start a "
+        "new one to continue.",
+        False,
+    ),
+    "refusal": (
+        "The model declined to answer this one.",
+        False,
+    ),
+}
+
 
 def system_blocks() -> list[dict[str, Any]]:
     """System prompt as content blocks, with the whole thing marked cacheable.
@@ -176,6 +198,14 @@ async def stream_ask(messages: list[dict[str, Any]]) -> AsyncIterator[dict[str, 
             return
 
         if response.stop_reason != "tool_use":
+            interrupted = INTERRUPTED_STOP_REASONS.get(response.stop_reason or "")
+            if interrupted is not None:
+                # Report it as a failure even though whatever streamed so far is
+                # kept. Ending on a bare `done` here is what made a cut-off turn
+                # look finished.
+                message, retryable = interrupted
+                log.warning("turn ended early: stop_reason=%s", response.stop_reason)
+                yield {"type": "error", "message": message, "retryable": retryable}
             yield {"type": "done", "stop_reason": response.stop_reason}
             return
 

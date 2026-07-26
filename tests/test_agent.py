@@ -278,3 +278,104 @@ async def test_token_usage_is_logged(census_db, monkeypatch, caplog):
         await collect([{"role": "user", "content": "?"}])
 
     assert "cache_read=1604" in caplog.text
+
+
+# --- how turns end ---------------------------------------------------------
+
+
+async def test_normal_finish_reports_done_with_no_error(census_db, monkeypatch):
+    install(monkeypatch, [turn(text="167,900 people.")])
+
+    events = await collect([{"role": "user", "content": "?"}])
+
+    assert [e["type"] for e in events] == ["text", "done"]
+    assert events[-1]["stop_reason"] == "end_turn"
+
+
+async def test_truncated_turn_is_reported_as_an_error(census_db, monkeypatch):
+    """A turn cut off mid-generation must not look like a finished one.
+
+    Reproduces the real failure: asked about a 15-bracket category, the model
+    wrote "I'll retrieve that now…" and then ran out of budget emitting its
+    tool calls. stop_reason was "max_tokens" with zero usable tool calls, and
+    the UI presented the preamble as the complete answer.
+    """
+    install(
+        monkeypatch,
+        [turn(text="I'll retrieve the family income data now.", stop_reason="max_tokens")],
+    )
+
+    events = await collect([{"role": "user", "content": "family income for couples"}])
+
+    kinds = [e["type"] for e in events]
+    assert "error" in kinds, "a truncated turn must surface an error"
+    assert kinds.index("error") < kinds.index("done")
+
+    error = next(e for e in events if e["type"] == "error")
+    assert "cut off" in error["message"]
+    assert error["retryable"] is True
+
+    # Whatever did stream is kept — the user should see the partial text, just
+    # not be told it is the whole answer.
+    assert any(e["type"] == "text" for e in events)
+
+
+async def test_context_window_exhaustion_is_not_retryable(census_db, monkeypatch):
+    install(
+        monkeypatch,
+        [turn(text="", stop_reason="model_context_window_exceeded")],
+    )
+
+    events = await collect([{"role": "user", "content": "?"}])
+    error = next(e for e in events if e["type"] == "error")
+    # Retrying the same oversized conversation fails identically.
+    assert error["retryable"] is False
+    assert "new one" in error["message"]
+
+
+async def test_refusal_is_surfaced(census_db, monkeypatch):
+    install(monkeypatch, [turn(text="", stop_reason="refusal")])
+
+    events = await collect([{"role": "user", "content": "?"}])
+    error = next(e for e in events if e["type"] == "error")
+    assert error["retryable"] is False
+    assert "declined" in error["message"]
+
+
+async def test_unrecognised_stop_reason_is_treated_as_a_normal_finish(
+    census_db, monkeypatch
+):
+    install(monkeypatch, [turn(text="fine", stop_reason="something_new")])
+
+    events = await collect([{"role": "user", "content": "?"}])
+    # A stop reason we have not seen should not invent a user-facing failure.
+    assert [e["type"] for e in events] == ["text", "done"]
+
+
+async def test_max_tokens_is_high_enough_for_a_wide_fan_out(census_db, monkeypatch):
+    """Fifteen tool calls in one turn is a real shape, not a hypothetical.
+
+    family_income_couple_by_children has 15 subcategories, and the model asks
+    for all of them at once.
+    """
+    calls = [
+        tool_use_block(f"toolu_{i}", "query_census", {
+            "category": "family_income_couple_by_children",
+            "subcategory": f"bracket {i}",
+        })
+        for i in range(15)
+    ]
+    fake = install(
+        monkeypatch,
+        [
+            turn(stop_reason="tool_use", content=calls),
+            turn(text="Here is the distribution."),
+        ],
+    )
+
+    events = await collect([{"role": "user", "content": "family income?"}])
+
+    assert len([e for e in events if e["type"] == "tool_use"]) == 15
+    assert events[-1]["type"] == "done"
+    # Headroom for that many blocks plus prose; 1024 was not enough.
+    assert fake.calls[0]["max_tokens"] >= 4096
