@@ -6,6 +6,7 @@ wrapper kept so the CLI below and the Streamlit app still work while the React
 frontend is being built.
 """
 
+import logging
 from collections.abc import AsyncIterator
 from typing import Any
 
@@ -15,6 +16,8 @@ from dotenv import load_dotenv
 from . import config, db
 
 load_dotenv()
+
+log = logging.getLogger("api.agent")
 
 # Constructed lazily so importing this module (in tests, or to reach TOOLS)
 # does not require credentials.
@@ -142,6 +145,20 @@ async def stream_ask(messages: list[dict[str, Any]]) -> AsyncIterator[dict[str, 
                     if event.type == "content_block_delta" and event.delta.type == "text_delta":
                         yield {"type": "text", "text": event.delta.text}
                 response = await stream.get_final_message()
+
+            # Cache behaviour is otherwise invisible: a prompt that silently
+            # stops caching costs ~1600 tokens a turn with no error to notice.
+            # After the first turn, cache_read should be non-zero and input
+            # small — if cache_read stays 0, something is invalidating the
+            # prefix (see the note on config.MODEL about cache minimums).
+            usage = response.usage
+            log.info(
+                "tokens: input=%s cache_write=%s cache_read=%s output=%s",
+                usage.input_tokens,
+                usage.cache_creation_input_tokens,
+                usage.cache_read_input_tokens,
+                usage.output_tokens,
+            )
         except anthropic.APIStatusError as exc:
             yield {
                 "type": "error",

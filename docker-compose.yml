@@ -1,5 +1,5 @@
 services:
-  api:
+  app:
     build: .
     ports:
       - "8000:8000"
@@ -8,21 +8,4 @@ services:
     volumes:
       # Read-only so a bug cannot write to the source database, and so
       # refreshing the data needs no rebuild.
-      - ./data:/app/data:ro
-
-  # Streamlit, kept runnable while the React frontend is built. Removed in the
-  # commit that deletes api/app.py.
-  app:
-    build: .
-    command:
-      - streamlit
-      - run
-      - api/app.py
-      - --server.port=8501
-      - --server.address=0.0.0.0
-    ports:
-      - "8501:8501"
-    env_file:
-      - .env
-    volumes:
       - ./data:/app/data:ro

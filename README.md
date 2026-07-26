@@ -58,12 +58,18 @@ make up
 make down
 ```
 
-- API: http://localhost:8000 (`/api/health` for a status summary)
-- Streamlit UI: http://localhost:8501 — being replaced by `web/`, removed once
-  the React frontend lands
+Then open http://localhost:8000. One container serves both the UI and the API
+on one port — the image's first stage builds the React bundle and FastAPI serves
+it, so there is no CORS to configure and no second runtime to deploy.
+`/api/health` gives a status summary including live rate-limit counters.
 
-Other commands: `make logs`, `make restart`, `make test`, `make freeze`
-(regenerate `requirements.txt` from the built image).
+Other commands: `make logs`, `make restart`, `make test`, `make types`.
+
+`requirements.txt` is a curated list of direct dependencies. It used to be a
+full `pip freeze`, most of which existed to support Streamlit; there is no
+longer a `make freeze` target, since freezing would put every transitive back.
+The pipeline's own dependencies are in `requirements-pipeline.txt` and are
+deliberately not installed into the runtime image.
 
 ## Frontend development
 
@@ -116,3 +122,20 @@ apply. All are configurable by environment variable — see `api/config.py`.
 service and an untrusted header would make the limits opt-out. If a proxy or a
 second replica is ever introduced, that and the in-memory counters must change
 together.
+
+## Observability
+
+The agent logs token usage per model call at INFO:
+
+```
+api.agent: tokens: input=332 cache_write=0 cache_read=2413 output=72
+```
+
+`cache_read` is the one to watch. The system prompt inlines every category and
+subcategory, so the cached prefix is ~2,400 tokens; if `cache_read` drops to 0
+the prompt cache has stopped working and each turn is paying full price for all
+of it, with no error raised. The usual cause is something making the prefix vary
+between requests, or a model change — cache minimums are model-specific, and the
+note on `config.MODEL` explains why the model is pinned.
+
+Set `LOG_LEVEL=WARNING` to quieten it.

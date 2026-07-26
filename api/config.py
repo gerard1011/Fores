@@ -31,6 +31,12 @@ DB_PATH = Path(os.environ.get("CENSUS_DB_PATH", REPO_ROOT / "data" / "boroondara
 # schema summary we cache below is ~1600. On Opus 4.8 (4096-token minimum) the
 # same block would silently fail to cache, so changing this is a real
 # migration, not a string swap.
+# --- Frontend -------------------------------------------------------------
+# The built React bundle. Present in the image; absent when running uvicorn
+# directly in dev, where Vite serves the UI instead.
+WEB_DIST = Path(os.environ.get("WEB_DIST", REPO_ROOT / "web" / "dist"))
+
+# --- Model ----------------------------------------------------------------
 MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-4-5")
 MAX_TOKENS = _int("ANTHROPIC_MAX_TOKENS", 1024)
 

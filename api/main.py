@@ -1,7 +1,8 @@
 """FastAPI application.
 
-Serves the census data and the agent. In this commit it runs alongside the
-Streamlit app; from commit 3 it also serves the built React bundle.
+Serves the census data, the agent, and the built React bundle — one process,
+one port, so there is no CORS to configure and nothing to keep in sync between
+two deployables.
 """
 
 import json
@@ -12,13 +13,35 @@ from contextlib import AsyncExitStack, asynccontextmanager
 
 from fastapi import FastAPI, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
 
 from . import config, db, schemas
 from .agent import stream_ask
 from .limits import RateLimited, client_ip, limiter
 
 log = logging.getLogger("api")
+
+
+def _configure_logging() -> None:
+    """Give the `api.*` loggers a handler.
+
+    Uvicorn's log config only sets up its own `uvicorn.*` loggers and leaves
+    root bare, so anything we log below WARNING otherwise goes nowhere — which
+    is how the token-usage line silently produced no output the first time.
+    """
+    level = os.environ.get("LOG_LEVEL", "INFO").upper()
+    api_log = logging.getLogger("api")
+    api_log.setLevel(level)
+    if not api_log.handlers:
+        handler = logging.StreamHandler()
+        handler.setFormatter(logging.Formatter("%(levelname)-8s %(name)s: %(message)s"))
+        api_log.addHandler(handler)
+    # Root already has uvicorn's access logs; don't double-print ours through it.
+    api_log.propagate = False
+
+
+_configure_logging()
 
 
 @asynccontextmanager
@@ -235,3 +258,55 @@ async def chat(request: Request, body: schemas.ChatRequest) -> StreamingResponse
         # generator never runs and its finally never fires.
         await stack.aclose()
         raise
+
+
+# --- Static frontend ------------------------------------------------------
+# Registered last, on purpose: the catch-all below would otherwise shadow every
+# API route. Starlette matches in registration order.
+
+if (config.WEB_DIST / "assets").is_dir():
+    app.mount(
+        "/assets",
+        StaticFiles(directory=config.WEB_DIST / "assets"),
+        name="assets",
+    )
+
+
+@app.get("/{full_path:path}", include_in_schema=False, response_model=None)
+async def spa(full_path: str) -> FileResponse | JSONResponse:
+    """Serve the built React app, falling back to index.html for client routes."""
+    # An unknown /api path must stay a JSON 404. Falling through to the HTML
+    # shell would return 200 and leave the client parsing a web page as JSON —
+    # a typo'd endpoint would look like a data bug rather than a missing route.
+    if full_path == "api" or full_path.startswith("api/"):
+        return JSONResponse(
+            status_code=404,
+            content=schemas.ErrorResponse(
+                detail=f"No such endpoint: /{full_path}", kind="bad_request"
+            ).model_dump(),
+        )
+
+    index = config.WEB_DIST / "index.html"
+    if not index.is_file():
+        # Running uvicorn without building the bundle — say which it is rather
+        # than returning a bare 404.
+        return JSONResponse(
+            status_code=503,
+            content=schemas.ErrorResponse(
+                detail=(
+                    "The frontend has not been built. Run `npm --prefix web run build`, "
+                    "or use the Vite dev server on port 5173."
+                ),
+                kind="unavailable",
+            ).model_dump(),
+        )
+
+    if full_path:
+        root = config.WEB_DIST.resolve()
+        candidate = (root / full_path).resolve()
+        # Only serve real files, and only from inside dist — full_path is
+        # attacker-controlled, so `../` must not escape the bundle.
+        if candidate.is_file() and root in candidate.parents:
+            return FileResponse(candidate)
+
+    return FileResponse(index)

@@ -120,11 +120,26 @@ class FakeAnthropic:
         return FakeStream(events, final)
 
 
+def usage(*, input_tokens=10, cache_write=0, cache_read=1600, output_tokens=20):
+    return SimpleNamespace(
+        input_tokens=input_tokens,
+        cache_creation_input_tokens=cache_write,
+        cache_read_input_tokens=cache_read,
+        output_tokens=output_tokens,
+    )
+
+
 def turn(*, text="", stop_reason="end_turn", content=None):
-    """One scripted model turn: streamed deltas plus the final message."""
+    """One scripted model turn: streamed deltas plus the final message.
+
+    Carries a `usage` object because the real response does — the agent reads it
+    to log cache behaviour, and a double that omits it would pass tests while
+    production raised AttributeError.
+    """
     events = [text_delta(chunk) for chunk in ([text] if text else [])]
     final = SimpleNamespace(
         stop_reason=stop_reason,
         content=content if content is not None else [text_block(text)],
+        usage=usage(),
     )
     return events, final

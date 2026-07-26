@@ -1,4 +1,4 @@
-.PHONY: build up down restart logs freeze clean test types
+.PHONY: build up down restart logs clean test types
 
 build:
 	docker compose build
@@ -14,8 +14,8 @@ restart: down up
 logs:
 	docker compose logs -f
 
-freeze:
-	docker compose run --rm api pip freeze > requirements.txt
+# `freeze` is gone: requirements.txt is now a curated list of direct
+# dependencies, and pip freeze would blow it back up with every transitive.
 
 clean:
 	docker compose down --rmi local

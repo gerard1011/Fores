@@ -1,0 +1,5 @@
+# Dependencies for the offline ETL in pipeline/. Not part of the serving path
+# and deliberately not in the runtime image — pandas and its stack roughly
+# triple the image size for a script that runs on a laptop, once, by hand.
+openpyxl==3.1.5
+pandas==3.0.5

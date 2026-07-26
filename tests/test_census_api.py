@@ -105,3 +105,66 @@ async def test_subcategories_index_carries_no_values(client):
     """Names only — this is what keeps a single up-front request defensible."""
     rows = (await client.get("/api/datasets/census/subcategories")).json()
     assert all(set(r) == {"category", "subcategory"} for r in rows)
+
+
+# --- SPA serving ----------------------------------------------------------
+
+
+async def test_unknown_api_path_is_a_json_404_not_the_html_shell(client):
+    """The catch-all must not swallow API typos.
+
+    Falling through to index.html would return 200 with a web page, leaving the
+    client parsing HTML as JSON — a missing route would look like a data bug.
+    """
+    resp = await client.get("/api/datasets/census/nope")
+    assert resp.status_code == 404
+    assert resp.json()["kind"] == "bad_request"
+
+
+async def test_unbuilt_frontend_explains_itself(client, monkeypatch, tmp_path):
+    # Explicitly point at a missing bundle — otherwise this passes or fails
+    # depending on whether the developer happens to have run a build.
+    monkeypatch.setattr(config, "WEB_DIST", tmp_path / "never-built")
+
+    resp = await client.get("/")
+    assert resp.status_code == 503
+    assert "npm --prefix web run build" in resp.json()["detail"]
+
+
+async def test_spa_serves_index_for_client_routes(client, monkeypatch, tmp_path):
+    dist = tmp_path / "dist"
+    dist.mkdir()
+    (dist / "index.html").write_text("<!doctype html><title>app</title>")
+    monkeypatch.setattr(config, "WEB_DIST", dist)
+
+    for path in ("/", "/some/client/route"):
+        resp = await client.get(path)
+        assert resp.status_code == 200, path
+        assert "<title>app</title>" in resp.text
+
+
+async def test_spa_serves_real_files_from_dist(client, monkeypatch, tmp_path):
+    dist = tmp_path / "dist"
+    dist.mkdir()
+    (dist / "index.html").write_text("shell")
+    (dist / "favicon.svg").write_text("<svg/>")
+    monkeypatch.setattr(config, "WEB_DIST", dist)
+
+    resp = await client.get("/favicon.svg")
+    assert resp.status_code == 200
+    assert resp.text == "<svg/>"
+
+
+async def test_spa_refuses_to_escape_the_bundle(client, monkeypatch, tmp_path):
+    dist = tmp_path / "dist"
+    dist.mkdir()
+    (dist / "index.html").write_text("shell")
+    secret = tmp_path / "secret.txt"
+    secret.write_text("do not serve me")
+    monkeypatch.setattr(config, "WEB_DIST", dist)
+
+    # full_path is attacker-controlled; traversal must fall back to the shell
+    # rather than reading a file outside dist.
+    resp = await client.get("/../secret.txt")
+    assert resp.status_code == 200
+    assert "do not serve me" not in resp.text

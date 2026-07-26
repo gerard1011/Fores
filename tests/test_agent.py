@@ -255,3 +255,26 @@ def test_schema_summary_refreshes_when_the_database_changes(census_db):
     # The database is bind-mounted and can change under a running process, so
     # the memo has to notice without a restart.
     assert "brand_new_category" in db.schema_summary()
+
+
+async def test_token_usage_is_logged(census_db, monkeypatch, caplog):
+    """Cache behaviour has to be observable or a silent regression is free.
+
+    A prompt that stops caching costs ~1600 tokens per turn and raises nothing.
+    """
+    from types import SimpleNamespace
+
+    usage = SimpleNamespace(
+        input_tokens=12,
+        cache_creation_input_tokens=0,
+        cache_read_input_tokens=1604,
+        output_tokens=41,
+    )
+    events, final = turn(text="ok")
+    final.usage = usage
+    install(monkeypatch, [(events, final)])
+
+    with caplog.at_level("INFO", logger="api.agent"):
+        await collect([{"role": "user", "content": "?"}])
+
+    assert "cache_read=1604" in caplog.text
