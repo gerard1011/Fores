@@ -396,3 +396,7 @@ for category, n in cursor.fetchall():
     print(f"  {category}: {n}")
 
 conn.close()
+
+
+
+#test
