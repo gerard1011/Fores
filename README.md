@@ -31,3 +31,9 @@ make down
 Then open http://localhost:8501. Requires a `.env` file in the project root with `ANTHROPIC_API_KEY` set.
 
 Other commands: `make down`, `make logs`, `make restart`, `make freeze` (regenerate `requirements.txt` from the built image).
+
+## React + FastAPI version (in progress)
+
+A React/TypeScript + FastAPI alternative to the Streamlit UI lives in
+`backend/` and `frontend/`, alongside the original `app/` (untouched). See
+`backend/README.md` and `frontend/README.md` for setup and run instructions.
