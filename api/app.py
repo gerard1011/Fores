@@ -1,6 +1,14 @@
+"""Streamlit UI — being replaced by web/ and deleted in a later commit.
+
+Left runnable so this commit stands on its own. It now goes through api.db
+rather than opening its own SQLite connection on a relative path, so it keeps
+working with the bind-mounted database.
+"""
+
 import streamlit as st
-import sqlite3
-from agent import ask  # import your working agent function
+
+from api.agent import ask
+from api.db import category_series, list_categories
 
 st.title("Boroondara Census Assistant")
 
@@ -32,30 +40,15 @@ st.divider()
 # --- Section 2: Manual lookup (ground truth checker) ---
 st.header("Manual lookup (verify the AI's answers)")
 
-conn = sqlite3.connect("data/boroondara_census.db")
-cursor = conn.cursor()
-
-cursor.execute("SELECT DISTINCT category FROM census_data ORDER BY category")
-categories = [row[0] for row in cursor.fetchall()]
-
+categories = [c["category"] for c in list_categories()]
 selected_category = st.selectbox("Select a category", categories)
 
-cursor.execute(
-    "SELECT DISTINCT subcategory FROM census_data WHERE category = ? ORDER BY subcategory",
-    (selected_category,)
-)
-subcategories = [row[0] for row in cursor.fetchall()]
-
+rows = category_series(selected_category)
+subcategories = sorted({r["subcategory"] for r in rows})
 selected_subcategory = st.selectbox("Select a subcategory", subcategories)
 
 if st.button("Look up"):
-    cursor.execute(
-        "SELECT year, value FROM census_data WHERE category = ? AND subcategory = ? ORDER BY year",
-        (selected_category, selected_subcategory)
-    )
-    results = cursor.fetchall()
     st.write(f"Results for {selected_category} — {selected_subcategory}:")
-    for year, value in results:
-        st.write(f"{year}: {value}")
-
-conn.close()
+    for row in rows:
+        if row["subcategory"] == selected_subcategory:
+            st.write(f"{row['year']}: {row['value']}")
