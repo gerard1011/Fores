@@ -35,7 +35,9 @@ export function ExplorerPane({ selection, onSelect }: Props) {
   return (
     <section
       aria-label="Explore the data"
-      className="flex min-h-[26rem] flex-col rounded-lg border border-hairline bg-surface lg:min-h-0"
+      // min-w-0 for the same reason as ChatPane: grid items will not shrink
+      // below their content without it, and the series table is wide.
+      className="flex min-h-[26rem] min-w-0 flex-col rounded-lg border border-hairline bg-surface lg:min-h-0"
     >
       <header className="space-y-2 border-b border-hairline px-4 py-3">
         <div>
