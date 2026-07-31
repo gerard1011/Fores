@@ -43,6 +43,20 @@ Two things are not in the repo and must be present before the app will work:
    hardcoded to an absolute path on another machine. Until that is
    parameterised, you need an existing copy of the `.db` file.
 
+   **The build must create this index on `census_data`:**
+
+   ```sql
+   CREATE INDEX ix_levels ON census_data(level, year, geo_code);
+   ```
+
+   Without it, `/api/datasets/census/levels` does full-table `GROUP BY` and
+   `COUNT(DISTINCT geo_code)` scans. Those are cheap on a local disk but take
+   ~60s over the read-only bind mount on Docker Desktop (random I/O on an ~87 MB
+   file), and that endpoint is hit on every page load. The index makes both
+   queries index-only. `api.db.list_levels` also memoizes its result on the
+   file's mtime, which covers repeat loads, but the *first* load after any data
+   refresh or container restart still needs the index to be fast.
+
 Without the key, the census endpoints still work and `/api/chat` returns 503.
 Without the database, both return 503 with an explanatory message rather than a
 stack trace.
