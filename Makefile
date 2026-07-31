@@ -4,12 +4,12 @@
 # the image never clones the repo — data/ is bind-mounted from the host — so the
 # real file has to exist host-side before the container starts. `build` depends
 # on this so a fresh clone gets it as part of the documented first-run flow.
+# Kept to two plain commands so the recipe runs under both cmd.exe and sh; if
+# git-lfs is missing, `git lfs` itself errors clearly and make stops. The
+# runtime guard in api/db.py catches an un-pulled pointer with a fuller message.
 lfs:
-	@git lfs version >/dev/null 2>&1 || { \
-	  echo "git-lfs is not installed. Install it from https://git-lfs.com, then re-run."; \
-	  exit 1; }
-	@git lfs install --local
-	@git lfs pull
+	git lfs install --local
+	git lfs pull
 
 build: lfs
 	docker compose build
