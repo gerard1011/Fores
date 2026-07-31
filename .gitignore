@@ -1,6 +1,6 @@
 .claude
-# Census databases are large binaries, gitignored and bind-mounted from ./data.
-data/*.db
+# Census databases are large binaries tracked via Git LFS (see .gitattributes)
+# and bind-mounted from ./data.
 .env
 .venv
 __pycache__/

@@ -32,15 +32,30 @@ class BadRequest(ValueError):
     from."""
 
 
+# A clone made without git-lfs leaves a small text *pointer* at data/census.db
+# instead of the real file. sqlite would open it and only fail on the first
+# query with an opaque "file is not a database", so catch it here and say what
+# to actually do about it.
+def _reject_lfs_pointer(path: Path) -> None:
+    with open(path, "rb") as f:
+        head = f.read(64)
+    if head.startswith(b"version https://git-lfs.github.com/spec/v1"):
+        raise DatabaseMissing(
+            f"{path} is an unresolved Git LFS pointer, not the database itself.\n"
+            "Install git-lfs (https://git-lfs.com), then run:\n"
+            "    git lfs install && git lfs pull"
+        )
+
+
 def _connect(path: Path | None = None) -> sqlite3.Connection:
     path = path or config.DB_PATH
     if not path.exists():
         raise DatabaseMissing(
             f"Census database not found at {path}.\n"
-            "The database is gitignored and bind-mounted from ./data, so it is not "
-            "created by the build. Place census.db there, or point CENSUS_DB_PATH "
-            "at an existing copy."
+            "The database is tracked with Git LFS and bind-mounted from ./data. "
+            "Run `git lfs pull`, or point CENSUS_DB_PATH at an existing copy."
         )
+    _reject_lfs_pointer(path)
     # mode=ro matches the read-only bind mount and makes an accidental write
     # fail loudly here rather than silently succeed against a stale copy.
     conn = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
