@@ -1,6 +1,17 @@
-.PHONY: build up down restart logs clean test types
+.PHONY: build up down restart logs clean test types lfs
 
-build:
+# The census database ships through Git LFS, and Docker can't fetch it for you:
+# the image never clones the repo — data/ is bind-mounted from the host — so the
+# real file has to exist host-side before the container starts. `build` depends
+# on this so a fresh clone gets it as part of the documented first-run flow.
+lfs:
+	@git lfs version >/dev/null 2>&1 || { \
+	  echo "git-lfs is not installed. Install it from https://git-lfs.com, then re-run."; \
+	  exit 1; }
+	@git lfs install --local
+	@git lfs pull
+
+build: lfs
 	docker compose build
 
 up:

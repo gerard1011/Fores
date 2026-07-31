@@ -38,10 +38,13 @@ One thing is not in the repo and must be present before the app will work:
 1. **`.env`** in the project root with `ANTHROPIC_API_KEY` set.
 
 The census database (`data/census.db`) **is** in the repo, tracked via
-[Git LFS](https://git-lfs.com). Install `git-lfs` before cloning (or run
-`git lfs install && git lfs pull` in an existing clone) so you get the real
-file rather than a small pointer. It is bind-mounted read-only into the
-container from `./data`, so refreshing the data needs no image rebuild.
+[Git LFS](https://git-lfs.com), so install `git-lfs` once
+(`git lfs install`) before cloning. `make build` runs `git lfs pull` for you,
+so the normal first-run flow materialises the real file; if git-lfs is missing
+it stops with instructions rather than building against a pointer. Docker can't
+do this step — the image never clones the repo (`data/` is bind-mounted from
+the host), so the file must exist host-side first. It is bind-mounted read-only
+into the container from `./data`, so refreshing the data needs no image rebuild.
 
 Regenerating it from source is not yet automated: `pipeline/boroondara.py` has
 its input spreadsheet and output paths hardcoded to an absolute path on another
