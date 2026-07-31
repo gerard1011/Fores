@@ -21,39 +21,55 @@ const YEAR_COLOR: Record<number, string> = {
 const AXIS = "var(--text-muted)";
 const ROW_HEIGHT = 34;
 
+/** A chart row: a label (subcategory or area) and one value per year. */
 export interface ChartRow {
-  subcategory: string;
-  [year: number]: number;
+  label: string;
+  [year: number]: number | string;
 }
 
-export function toRows(series: CategorySeries): ChartRow[] {
+function group(points: CategorySeries["points"], keyOf: (p: CategorySeries["points"][number]) => string, seed: string[] = []): ChartRow[] {
   const rows = new Map<string, ChartRow>();
-  for (const point of series.points) {
-    const row = rows.get(point.subcategory) ?? { subcategory: point.subcategory };
+  // Seed with labels that must appear even when they have no points (an area
+  // with no data for the chosen subcategory), so a gap reads as "—" not absence.
+  for (const label of seed) rows.set(label, { label });
+  for (const point of points) {
+    const key = keyOf(point);
+    const row = rows.get(key) ?? { label: key };
     row[point.year] = point.value;
-    rows.set(point.subcategory, row);
+    rows.set(key, row);
   }
   return [...rows.values()];
 }
 
-interface Props {
-  series: CategorySeries;
+/** One row per subcategory — the single-area view. */
+export function toRows(series: CategorySeries): ChartRow[] {
+  return group(series.points, (p) => p.subcategory);
+}
+
+/** One row per area for a single subcategory — the comparison view. */
+export function toAreaRows(series: CategorySeries, subcategory: string): ChartRow[] {
+  const seed = series.geographies.map((g) => g.geo_name);
+  const points = series.points.filter((p) => p.subcategory === subcategory);
+  return group(points, (p) => p.geo_name, seed);
+}
+
+interface BarsProps {
+  rows: ChartRow[];
+  years: number[];
+  /** A label to emphasise, or null. Used only in the subcategory view. */
   highlighted: string | null;
+  labelWidth: number;
 }
 
 /**
- * A whole category across every census year.
+ * Horizontal year-coloured bars, one group per row.
  *
- * Horizontal bars because subcategory labels are long ("semi-detached, row or
- * terrace house") and there can be 35 of them — vertical bars would give
- * rotated, unreadable ticks. The plot grows with the row count and scrolls
- * inside its own container rather than squashing.
- *
- * A highlighted subcategory is emphasised with opacity, not a different
- * colour: hue encodes the year, and repainting one row would break that.
+ * Horizontal because labels are long (a subcategory like "semi-detached, row or
+ * terrace house", or a canonical area name) and there can be many — vertical
+ * bars would give rotated, unreadable ticks. Hue encodes the year in both
+ * views, so a highlighted row is dimmed by opacity rather than recoloured.
  */
-export function SeriesChart({ series, highlighted }: Props) {
-  const rows = toRows(series);
+function YearBars({ rows, years, highlighted, labelWidth }: BarsProps) {
   const height = Math.max(200, rows.length * ROW_HEIGHT + 48);
 
   return (
@@ -77,12 +93,12 @@ export function SeriesChart({ series, highlighted }: Props) {
           />
           <YAxis
             type="category"
-            dataKey="subcategory"
-            width={150}
+            dataKey="label"
+            width={labelWidth}
             stroke={AXIS}
             tickLine={false}
             axisLine={{ stroke: "var(--baseline)" }}
-            tick={(props) => <SubcategoryTick {...props} highlighted={highlighted} />}
+            tick={(props) => <LabelTick {...props} highlighted={highlighted} />}
           />
           <Tooltip
             cursor={{ fill: "var(--wash)" }}
@@ -92,7 +108,7 @@ export function SeriesChart({ series, highlighted }: Props) {
               ) : null
             }
           />
-          {series.years.map((year) => (
+          {years.map((year) => (
             <Bar
               key={year}
               dataKey={year}
@@ -103,10 +119,8 @@ export function SeriesChart({ series, highlighted }: Props) {
             >
               {rows.map((row) => (
                 <Cell
-                  key={row.subcategory}
-                  fillOpacity={
-                    !highlighted || row.subcategory === highlighted ? 1 : 0.3
-                  }
+                  key={row.label}
+                  fillOpacity={!highlighted || row.label === highlighted ? 1 : 0.3}
                 />
               ))}
             </Bar>
@@ -114,6 +128,36 @@ export function SeriesChart({ series, highlighted }: Props) {
         </BarChart>
       </ResponsiveContainer>
     </div>
+  );
+}
+
+interface Props {
+  series: CategorySeries;
+  highlighted: string | null;
+}
+
+/** A whole category across every census year, for a single area. */
+export function SeriesChart({ series, highlighted }: Props) {
+  return (
+    <YearBars rows={toRows(series)} years={series.years} highlighted={highlighted} labelWidth={150} />
+  );
+}
+
+/** One subcategory across every census year, compared across areas. */
+export function AreaComparisonChart({
+  series,
+  subcategory,
+}: {
+  series: CategorySeries;
+  subcategory: string;
+}) {
+  return (
+    <YearBars
+      rows={toAreaRows(series, subcategory)}
+      years={series.years}
+      highlighted={null}
+      labelWidth={170}
+    />
   );
 }
 
@@ -137,7 +181,7 @@ export function ChartLegend({ years }: { years: number[] }) {
 
 // Recharts types its tick coordinates as string | number, so this takes them
 // loosely and narrows here rather than fighting the upstream signature.
-function SubcategoryTick(props: {
+function LabelTick(props: {
   x?: string | number;
   y?: string | number;
   payload?: { value?: string };

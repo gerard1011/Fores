@@ -5,7 +5,11 @@ export type Category = components["schemas"]["Category"];
 export type CategorySeries = components["schemas"]["CategorySeries"];
 export type SeriesPoint = components["schemas"]["SeriesPoint"];
 export type SubcategoryRef = components["schemas"]["SubcategoryRef"];
+export type Level = components["schemas"]["Level"];
+export type Geography = components["schemas"]["Geography"];
 export type ApiError = components["schemas"]["ErrorResponse"];
+
+const CENSUS = "/api/datasets/census";
 
 /** A non-2xx response, carrying the server's structured error body. */
 export class RequestFailed extends Error {
@@ -46,19 +50,35 @@ async function getJson<T>(url: string, signal?: AbortSignal): Promise<T> {
   return (await response.json()) as T;
 }
 
-export function fetchCategories(signal?: AbortSignal): Promise<Category[]> {
-  return getJson<Category[]>("/api/datasets/census/categories", signal);
+export function fetchLevels(signal?: AbortSignal): Promise<Level[]> {
+  return getJson<Level[]>(`${CENSUS}/levels`, signal);
 }
 
-export function fetchSubcategories(signal?: AbortSignal): Promise<SubcategoryRef[]> {
-  return getJson<SubcategoryRef[]>("/api/datasets/census/subcategories", signal);
+export function fetchGeographies(level: string, signal?: AbortSignal): Promise<Geography[]> {
+  return getJson<Geography[]>(`${CENSUS}/geographies?level=${encodeURIComponent(level)}`, signal);
 }
 
-export function fetchSeries(category: string, signal?: AbortSignal): Promise<CategorySeries> {
-  return getJson<CategorySeries>(
-    `/api/datasets/census/series?category=${encodeURIComponent(category)}`,
+export function fetchCategories(level: string, signal?: AbortSignal): Promise<Category[]> {
+  return getJson<Category[]>(`${CENSUS}/categories?level=${encodeURIComponent(level)}`, signal);
+}
+
+export function fetchSubcategories(level: string, signal?: AbortSignal): Promise<SubcategoryRef[]> {
+  return getJson<SubcategoryRef[]>(
+    `${CENSUS}/subcategories?level=${encodeURIComponent(level)}`,
     signal,
   );
+}
+
+/** Compare one category across N areas. `geo` repeats, one per area. */
+export function fetchSeries(
+  category: string,
+  level: string,
+  geoCodes: string[],
+  signal?: AbortSignal,
+): Promise<CategorySeries> {
+  const params = new URLSearchParams({ category, level });
+  for (const code of geoCodes) params.append("geo", code);
+  return getJson<CategorySeries>(`${CENSUS}/series?${params.toString()}`, signal);
 }
 
 export interface ChatTurn {
