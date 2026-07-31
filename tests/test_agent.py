@@ -36,7 +36,12 @@ async def test_tool_call_emits_use_then_result_with_real_data(census_db, monkeyp
                     tool_use_block(
                         "toolu_1",
                         "query_census",
-                        {"category": "dwelling_structure", "subcategory": "separate house"},
+                        {
+                            "category": "dwelling_structure",
+                            "subcategory": "separate house",
+                            "level": "LGA",
+                            "geo_codes": ["LGA21110"],
+                        },
                     )
                 ],
             ),
@@ -205,6 +210,90 @@ async def test_missing_database_yields_an_error_event(monkeypatch, tmp_path):
     assert "not found" in events[0]["message"]
 
 
+# --- geography -------------------------------------------------------------
+
+
+async def test_find_geography_resolves_a_name_to_a_geo_code(census_db, monkeypatch):
+    install(
+        monkeypatch,
+        [
+            turn(
+                stop_reason="tool_use",
+                content=[
+                    tool_use_block(
+                        "toolu_1",
+                        "find_geography",
+                        {"level": "LGA", "name_query": "Boroondara"},
+                    )
+                ],
+            ),
+            turn(text="Boroondara is LGA21110."),
+        ],
+    )
+
+    events = await collect([{"role": "user", "content": "what's Boroondara's code?"}])
+    result = next(e for e in events if e["type"] == "tool_result")
+    assert result["is_error"] is False
+    assert "LGA21110" in result["content"]
+
+
+async def test_find_geography_surfaces_a_name_collision(census_db, monkeypatch):
+    """Two Campbelltowns must come back as distinct, state-tagged candidates so
+    the model can disambiguate rather than silently pick one."""
+    install(
+        monkeypatch,
+        [
+            turn(
+                stop_reason="tool_use",
+                content=[
+                    tool_use_block(
+                        "toolu_1",
+                        "find_geography",
+                        {"level": "LGA", "name_query": "Campbelltown"},
+                    )
+                ],
+            ),
+            turn(text="There are two — which did you mean?"),
+        ],
+    )
+
+    events = await collect([{"role": "user", "content": "Campbelltown?"}])
+    content = next(e for e in events if e["type"] == "tool_result")["content"]
+    assert "LGA11500" in content and "LGA40910" in content
+    assert "New South Wales" in content and "South Australia" in content
+
+
+async def test_query_census_reports_a_gap_as_unavailable_not_zero(census_db, monkeypatch):
+    """Campbelltown NSW has no dwelling_structure rows. The tool result must say
+    so, not hand the model an empty series it might read as zero."""
+    install(
+        monkeypatch,
+        [
+            turn(
+                stop_reason="tool_use",
+                content=[
+                    tool_use_block(
+                        "toolu_1",
+                        "query_census",
+                        {
+                            "category": "dwelling_structure",
+                            "subcategory": "separate house",
+                            "level": "LGA",
+                            "geo_codes": ["LGA11500"],
+                        },
+                    )
+                ],
+            ),
+            turn(text="No data for that one."),
+        ],
+    )
+
+    events = await collect([{"role": "user", "content": "houses in Campbelltown NSW?"}])
+    result = next(e for e in events if e["type"] == "tool_result")
+    assert result["is_error"] is False
+    assert "no data available" in result["content"]
+
+
 # --- prompt caching -------------------------------------------------------
 
 
@@ -228,8 +317,8 @@ async def test_system_prompt_is_byte_identical_across_turns(census_db, monkeypat
 
 
 def test_schema_summary_is_memoized(census_db):
-    first = db.schema_summary()
-    assert db.schema_summary() is first, "should be served from the memo"
+    first = db.schema_summary("LGA")
+    assert db.schema_summary("LGA") is first, "should be served from the memo"
     assert "dwelling_structure: flat or apartment, separate house" in first
 
 
@@ -238,12 +327,13 @@ def test_schema_summary_refreshes_when_the_database_changes(census_db):
     import sqlite3
     import time
 
-    before = db.schema_summary()
+    before = db.schema_summary("LGA")
     assert "brand_new_category" not in before
 
     conn = sqlite3.connect(census_db)
     conn.execute(
-        "INSERT INTO census_data VALUES ('Boroondara', 2021, 'brand_new_category', 'x', 1)"
+        "INSERT INTO census_data VALUES "
+        "('LGA', 'LGA21110', 'Boroondara', 2021, 'brand_new_category', 'x', 1)"
     )
     conn.commit()
     conn.close()
@@ -254,7 +344,7 @@ def test_schema_summary_refreshes_when_the_database_changes(census_db):
 
     # The database is bind-mounted and can change under a running process, so
     # the memo has to notice without a restart.
-    assert "brand_new_category" in db.schema_summary()
+    assert "brand_new_category" in db.schema_summary("LGA")
 
 
 async def test_token_usage_is_logged(census_db, monkeypatch, caplog):
@@ -362,6 +452,8 @@ async def test_max_tokens_is_high_enough_for_a_wide_fan_out(census_db, monkeypat
         tool_use_block(f"toolu_{i}", "query_census", {
             "category": "family_income_couple_by_children",
             "subcategory": f"bracket {i}",
+            "level": "LGA",
+            "geo_codes": ["LGA21110"],
         })
         for i in range(15)
     ]

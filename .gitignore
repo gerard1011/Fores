@@ -1,5 +1,6 @@
 .claude
-boroondara_census.db
+# Census databases are large binaries, gitignored and bind-mounted from ./data.
+data/*.db
 .env
 .venv
 __pycache__/

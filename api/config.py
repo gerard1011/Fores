@@ -24,19 +24,34 @@ def _int(name: str, default: int) -> int:
 # Relative paths resolve against the repo root rather than the process CWD,
 # so `uvicorn api.main:app` works from anywhere.
 REPO_ROOT = Path(__file__).resolve().parent.parent
-DB_PATH = Path(os.environ.get("CENSUS_DB_PATH", REPO_ROOT / "data" / "boroondara_census.db"))
+DB_PATH = Path(os.environ.get("CENSUS_DB_PATH", REPO_ROOT / "data" / "census.db"))
 
-# --- Model ----------------------------------------------------------------
-# Deliberately pinned. Sonnet 4.5's prompt-cache minimum is 1024 tokens; the
-# schema summary we cache below is ~1600. On Opus 4.8 (4096-token minimum) the
-# same block would silently fail to cache, so changing this is a real
-# migration, not a string swap.
+# The geography level shown on first load and used as the default for the
+# category/subcategory endpoints when no `level` is supplied. LGA is the richer
+# granularity (565 areas vs 9 states) and keeps continuity with the app's
+# single-LGA (Boroondara) heritage.
+DEFAULT_LEVEL = os.environ.get("CENSUS_DEFAULT_LEVEL", "LGA")
+
+# Max areas comparable in one /series (or db.category_series) request. Bounds
+# the SQL IN() size and the chart legend's legibility.
+MAX_GEO_CODES = _int("CENSUS_MAX_GEO_CODES", 12)
+
+# The agent's own ceiling on areas per query_census call — kept separate from
+# MAX_GEO_CODES on purpose: this one is about output tokens per turn (each area
+# multiplies the tool-result payload and the prose), not query size, so it can
+# be tightened independently if a wide comparison starts hitting max_tokens.
+AGENT_MAX_GEO_CODES = _int("CENSUS_AGENT_MAX_GEO_CODES", 12)
+
 # --- Frontend -------------------------------------------------------------
 # The built React bundle. Present in the image; absent when running uvicorn
 # directly in dev, where Vite serves the UI instead.
 WEB_DIST = Path(os.environ.get("WEB_DIST", REPO_ROOT / "web" / "dist"))
 
 # --- Model ----------------------------------------------------------------
+# Deliberately pinned. Sonnet 4.5's prompt-cache minimum is 1024 tokens; the
+# schema summary we cache in agent.py is ~1600. On Opus 4.8 (4096-token
+# minimum) the same block would silently fail to cache, so changing this is a
+# real migration, not a string swap.
 MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-4-5")
 
 # A ceiling, not a target — output is billed per token actually generated, so
