@@ -166,6 +166,14 @@ def _name_for(canonical: dict[str, str], geo_code: str) -> str:
 # --- Geography ------------------------------------------------------------
 
 
+# Memoized like the canonical map and schema summary: the levels and their
+# area counts are stable for a given database file, so the result is keyed on
+# the file's mtime and recomputed only when the data is refreshed. This matters
+# because /levels is hit on every page load and its full-table GROUP BY /
+# COUNT(DISTINCT) scans are slow over the read-only bind mount.
+_levels_cache: dict[float, list[dict]] = {}
+
+
 def list_levels(path: Path | None = None) -> list[dict]:
     """Every level with its area count.
 
@@ -174,6 +182,13 @@ def list_levels(path: Path | None = None) -> list[dict]:
     distinct count, which is larger because the ABS creates, merges, and
     abolishes areas between censuses.
     """
+    path = path or config.DB_PATH
+    if not path.exists():
+        raise DatabaseMissing(f"Census database not found at {path}.")
+    mtime = path.stat().st_mtime
+    cached = _levels_cache.get(mtime)
+    if cached is not None:
+        return cached
     with _connect(path) as conn:
         rows = conn.execute(
             "SELECT level, MAX(year) AS latest FROM census_data GROUP BY level"
@@ -186,7 +201,12 @@ def list_levels(path: Path | None = None) -> list[dict]:
                 (r["level"], r["latest"]),
             ).fetchone()[0]
             levels.append({"level": r["level"], "area_count": count})
-    return sorted(levels, key=lambda x: x["level"])
+    built = sorted(levels, key=lambda x: x["level"])
+    # Only ever one live database version; drop stale entries on refresh.
+    for stale in [k for k in _levels_cache if k != mtime]:
+        del _levels_cache[stale]
+    _levels_cache[mtime] = built
+    return built
 
 
 def resolve_geographies(level: str, geo_codes: list[str], path: Path | None = None) -> list[dict]:
