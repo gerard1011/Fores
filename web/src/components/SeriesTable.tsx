@@ -1,35 +1,39 @@
 import { ArrowDown, ArrowUp } from "lucide-react";
 import { useMemo, useState } from "react";
-import type { CategorySeries } from "@/api/client";
-import { toRows } from "./SeriesChart";
+import type { ChartRow } from "./SeriesChart";
 import { cn, formatValue } from "@/lib/utils";
 
 interface Props {
-  series: CategorySeries;
+  rows: ChartRow[];
+  years: number[];
+  /** Header for the first column: "Subcategory" or "Area". */
+  labelHeader: string;
+  caption: string;
   highlighted: string | null;
-  onSelect: (subcategory: string) => void;
+  onSelect?: (label: string) => void;
 }
 
-type SortKey = "subcategory" | number;
+type SortKey = "label" | number;
 
 /**
  * The same data as a table.
  *
  * Not a fallback — it is the accessible reading of the chart and the exact
  * numbers you need when checking an answer, which a bar length cannot give you.
+ * Drives both the single-area (rows = subcategories) and comparison
+ * (rows = areas) views; the caller decides what a row is.
  */
-export function SeriesTable({ series, highlighted, onSelect }: Props) {
-  const [sortKey, setSortKey] = useState<SortKey>("subcategory");
+export function SeriesTable({ rows, years, labelHeader, caption, highlighted, onSelect }: Props) {
+  const [sortKey, setSortKey] = useState<SortKey>("label");
   const [descending, setDescending] = useState(false);
 
-  const rows = useMemo(() => {
-    const data = toRows(series);
-    const sorted = [...data].sort((a, b) => {
-      if (sortKey === "subcategory") return a.subcategory.localeCompare(b.subcategory);
-      return (a[sortKey] ?? 0) - (b[sortKey] ?? 0);
+  const sorted = useMemo(() => {
+    const data = [...rows].sort((a, b) => {
+      if (sortKey === "label") return a.label.localeCompare(b.label);
+      return (Number(a[sortKey] ?? 0)) - (Number(b[sortKey] ?? 0));
     });
-    return descending ? sorted.reverse() : sorted;
-  }, [series, sortKey, descending]);
+    return descending ? data.reverse() : data;
+  }, [rows, sortKey, descending]);
 
   function sortBy(key: SortKey) {
     if (key === sortKey) {
@@ -37,26 +41,24 @@ export function SeriesTable({ series, highlighted, onSelect }: Props) {
     } else {
       setSortKey(key);
       // Names read naturally A→Z; numbers are almost always wanted biggest first.
-      setDescending(key !== "subcategory");
+      setDescending(key !== "label");
     }
   }
 
   return (
     <div className="overflow-x-auto">
       <table className="w-full border-collapse text-xs">
-        <caption className="sr-only">
-          {series.category} by subcategory and census year
-        </caption>
+        <caption className="sr-only">{caption}</caption>
         <thead>
           <tr className="border-b border-hairline">
             <SortHeader
-              label="Subcategory"
-              active={sortKey === "subcategory"}
+              label={labelHeader}
+              active={sortKey === "label"}
               descending={descending}
-              onClick={() => sortBy("subcategory")}
+              onClick={() => sortBy("label")}
               align="left"
             />
-            {series.years.map((year) => (
+            {years.map((year) => (
               <SortHeader
                 key={year}
                 label={String(year)}
@@ -69,14 +71,15 @@ export function SeriesTable({ series, highlighted, onSelect }: Props) {
           </tr>
         </thead>
         <tbody>
-          {rows.map((row) => {
-            const selected = row.subcategory === highlighted;
+          {sorted.map((row) => {
+            const selected = row.label === highlighted;
             return (
               <tr
-                key={row.subcategory}
-                onClick={() => onSelect(row.subcategory)}
+                key={row.label}
+                onClick={onSelect ? () => onSelect(row.label) : undefined}
                 className={cn(
-                  "cursor-pointer border-b border-hairline/60 transition-colors hover:bg-wash",
+                  "border-b border-hairline/60 transition-colors",
+                  onSelect && "cursor-pointer hover:bg-wash",
                   selected && "bg-wash",
                 )}
               >
@@ -86,14 +89,11 @@ export function SeriesTable({ series, highlighted, onSelect }: Props) {
                     selected ? "font-semibold text-ink" : "text-ink-secondary",
                   )}
                 >
-                  {row.subcategory}
+                  {row.label}
                 </td>
-                {series.years.map((year) => (
-                  <td
-                    key={year}
-                    className="py-1.5 pl-2 text-right tabular-nums text-ink"
-                  >
-                    {row[year] == null ? "—" : formatValue(row[year])}
+                {years.map((year) => (
+                  <td key={year} className="py-1.5 pl-2 text-right tabular-nums text-ink">
+                    {row[year] == null ? "—" : formatValue(Number(row[year]))}
                   </td>
                 ))}
               </tr>

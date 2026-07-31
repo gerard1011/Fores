@@ -17,9 +17,9 @@ interface Props {
 }
 
 const EXAMPLES = [
-  "How did the number of separate houses change between 2016 and 2021?",
-  "What's the breakdown of dwelling types in 2021?",
-  "How many people were aged 20-24 in 2016?",
+  "Compare the population of Boroondara and Stonnington across the censuses.",
+  "How did the number of separate houses in Victoria change between 2016 and 2021?",
+  "Which state grew fastest between 2011 and 2021?",
 ];
 
 export function ChatPane({
@@ -88,7 +88,7 @@ function Empty({ onPick, disabled }: { onPick: (q: string) => void; disabled: bo
   return (
     <div className="py-6">
       <p className="mb-3 text-sm text-ink-secondary">
-        Ask about Boroondara census data from 2011, 2016 and 2021.
+        Ask about Australian census data — local areas or states, 2011 to 2021.
       </p>
       <ul className="space-y-1.5">
         {EXAMPLES.map((example) => (
@@ -255,7 +255,7 @@ function Composer({
               submit();
             }
           }}
-          placeholder={locked ? "Waiting…" : "Ask about Boroondara census data…"}
+          placeholder={locked ? "Waiting…" : "Ask about Australian census data…"}
           aria-label="Your question"
           className={cn(
             "max-h-32 min-h-9 flex-1 resize-none rounded-md border border-hairline bg-page px-3 py-2 text-sm",

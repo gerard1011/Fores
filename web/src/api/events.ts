@@ -15,6 +15,19 @@ export type ChatEvent =
   | { type: "done"; stop_reason: string };
 
 /**
+ * The input shape of the backend's `query_census` tool, mirrored by hand from
+ * the tool schema in api/agent.py — the same reason the events above are
+ * hand-kept. Used to read a citation off a tool_use event; the raw event input
+ * stays an untyped bag because other tools have other shapes.
+ */
+export interface QueryCensusInput {
+  category: string;
+  subcategory: string;
+  level: string;
+  geo_codes: string[];
+}
+
+/**
  * Incremental SSE frame parser.
  *
  * A network chunk has no relationship to a frame boundary: one chunk can carry

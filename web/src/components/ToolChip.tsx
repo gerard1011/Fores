@@ -1,6 +1,7 @@
 import * as Collapsible from "@radix-ui/react-collapsible";
-import { AlertTriangle, ChevronRight, Database, Loader2, Sigma } from "lucide-react";
+import { AlertTriangle, ChevronRight, Database, Loader2, MapPin, Sigma } from "lucide-react";
 import { useState } from "react";
+import type { QueryCensusInput } from "@/api/events";
 import type { ToolStep } from "@/hooks/useChat";
 import { cn, formatValue, humanise } from "@/lib/utils";
 
@@ -8,19 +9,32 @@ import { cn, formatValue, humanise } from "@/lib/utils";
 export interface Citation {
   category: string;
   subcategory: string;
+  level: string;
+  geoCodes: string[];
 }
 
 export function citationOf(step: ToolStep): Citation | null {
   if (step.name !== "query_census") return null;
-  const { category, subcategory } = step.input;
+  const input = step.input as Partial<QueryCensusInput>;
+  const { category, subcategory, level, geo_codes } = input;
   if (typeof category !== "string" || typeof subcategory !== "string") return null;
-  return { category, subcategory };
+  if (typeof level !== "string") return null;
+  if (!Array.isArray(geo_codes) || geo_codes.some((c) => typeof c !== "string")) return null;
+  return { category, subcategory, level, geoCodes: geo_codes };
 }
 
 function summarise(step: ToolStep): string {
   const citation = citationOf(step);
   if (citation) {
-    return `Queried ${humanise(citation.category)} → ${citation.subcategory}`;
+    const areas =
+      citation.geoCodes.length === 1
+        ? "1 area"
+        : `${citation.geoCodes.length} areas`;
+    return `Queried ${humanise(citation.category)} → ${citation.subcategory} (${areas})`;
+  }
+  if (step.name === "find_geography") {
+    const q = typeof step.input.name_query === "string" ? step.input.name_query : "";
+    return q ? `Looked up "${q}"` : "Looked up an area";
   }
   if (step.name === "calculate_change") {
     const { value_start, value_end } = step.input;
@@ -56,7 +70,9 @@ export function ToolChip({ step, onSelect }: Props) {
       ? Loader2
       : step.name === "query_census"
         ? Database
-        : Sigma;
+        : step.name === "find_geography"
+          ? MapPin
+          : Sigma;
 
   return (
     <Collapsible.Root
