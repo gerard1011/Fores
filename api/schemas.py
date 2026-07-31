@@ -11,6 +11,18 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 
+class Level(BaseModel):
+    level: str = Field(description="Geography granularity: 'LGA' or 'STE'.")
+    area_count: int = Field(
+        description="Areas at this level in the latest census year — the universe the picker offers."
+    )
+
+
+class Geography(BaseModel):
+    geo_code: str = Field(description="Stable cross-year identifier; passed back in /series.")
+    geo_name: str = Field(description="Canonical display name, unique within the level.")
+
+
 class Category(BaseModel):
     category: str
     subcategory_count: int = Field(
@@ -24,6 +36,8 @@ class SubcategoryRef(BaseModel):
 
 
 class SeriesPoint(BaseModel):
+    geo_code: str
+    geo_name: str = Field(description="Canonical name for the area, for the legend.")
     subcategory: str
     year: int
     value: int
@@ -31,6 +45,10 @@ class SeriesPoint(BaseModel):
 
 class CategorySeries(BaseModel):
     category: str
+    level: str
+    geographies: list[Geography] = Field(
+        description="The areas echoed back, so the client can build the legend without a second call."
+    )
     years: list[int] = Field(description="Sorted, so the chart can build its axis directly.")
     points: list[SeriesPoint]
 

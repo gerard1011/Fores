@@ -40,22 +40,60 @@ def calculate_change(value_start: float, value_end: float) -> dict:
     }
 
 
+def _format_query_census(result: dict) -> str:
+    """Render per-area series for the model, making a gap explicit.
+
+    An area with no rows for the subcategory (a curated gap, or an area that
+    does not carry that metric) is reported as "no data available" rather than
+    omitted — otherwise the model is liable to read absence as a zero.
+    """
+    lines = []
+    for geo_code, info in result.items():
+        if info["series"]:
+            points = ", ".join(f"{year}: {value}" for year, value in info["series"])
+            lines.append(f"{info['name']} ({geo_code}): {points}")
+        else:
+            lines.append(
+                f"{info['name']} ({geo_code}): no data available for this subcategory"
+            )
+    return "\n".join(lines) if lines else "no data available for the requested areas"
+
+
+def _format_find_geography(matches: list[dict]) -> str:
+    if not matches:
+        return "no matching areas found"
+    return "\n".join(f"{m['geo_name']} -> geo_code {m['geo_code']}" for m in matches)
+
+
 # Order is load-bearing: tools render first in the cached prefix, so reordering
-# this list invalidates the prompt cache on every subsequent request.
+# this list invalidates the prompt cache on every subsequent request. New tools
+# and fields are appended, never inserted.
 TOOLS = [
     {
         "name": "query_census",
         "description": (
-            "Query Boroondara census data by category and subcategory. "
-            "Returns year/value pairs."
+            "Query census data for one or more areas at a chosen granularity "
+            "(LGA or State). Returns per-area year/value series."
         ),
         "input_schema": {
             "type": "object",
             "properties": {
                 "category": {"type": "string"},
                 "subcategory": {"type": "string"},
+                "level": {
+                    "type": "string",
+                    "enum": ["LGA", "STE"],
+                    "description": "Granularity: 'LGA' (local government area) or 'STE' (state/territory).",
+                },
+                "geo_codes": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "minItems": 1,
+                    "maxItems": config.AGENT_MAX_GEO_CODES,
+                    "description": "Area identifiers from find_geography. Pass several to compare areas.",
+                },
             },
-            "required": ["category", "subcategory"],
+            "required": ["category", "subcategory", "level", "geo_codes"],
         },
     },
     {
@@ -74,16 +112,38 @@ TOOLS = [
             "required": ["value_start", "value_end"],
         },
     },
+    {
+        "name": "find_geography",
+        "description": (
+            "Resolve an area name to its geo_code(s) at a granularity (LGA or "
+            "State). Call this before query_census to turn a place name into the "
+            "geo_codes it needs. Returns candidate areas; if more than one "
+            "matches, pick the intended area or ask the user."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "level": {"type": "string", "enum": ["LGA", "STE"]},
+                "name_query": {
+                    "type": "string",
+                    "description": "Part of an area's name, e.g. 'Boroondara' or 'Victoria'.",
+                },
+            },
+            "required": ["level", "name_query"],
+        },
+    },
 ]
 
 TOOL_IMPLS = {
-    "query_census": lambda **kw: db.query_census(**kw),
+    "query_census": lambda **kw: _format_query_census(db.query_census(**kw)),
     "calculate_change": lambda **kw: calculate_change(**kw),
+    "find_geography": lambda **kw: _format_find_geography(db.find_geography(**kw)),
 }
 
 # A turn that keeps calling tools without concluding would otherwise hold the
-# rate limiter's global slot until it exhausted itself. Two tools over three
-# census years never needs anywhere near this many round trips.
+# rate limiter's global slot until it exhausted itself. A find_geography lookup
+# followed by a query or two over three census years never needs anywhere near
+# this many round trips.
 MAX_TOOL_ITERATIONS = 10
 
 # Why the answer stopped, when it stopped for a reason worth telling the user
@@ -117,14 +177,25 @@ def system_blocks() -> list[dict[str, Any]]:
     summary is ~1600 tokens, comfortably over Sonnet 4.5's 1024-token minimum.
     Read the note on config.MODEL before changing models — Opus 4.8's minimum
     is 4096 and this block would silently stop caching.
+
+    The vocabulary is identical across levels, so the summary is injected once
+    (for the default level) and stays byte-identical from turn to turn — which
+    is what keeps the cached prefix stable.
     """
     text = (
-        "You are a census data assistant for Boroondara, Australia.\n"
-        "You have access to a query_census tool. The database contains these exact \n"
-        "categories and subcategories - always use these EXACT values, never guess \n"
-        "or paraphrase them:\n\n"
-        f"{db.schema_summary()}\n\n"
-        "When comparing values across years or calculating growth/change, always \n"
+        "You are a census data assistant for Australian census data at Local "
+        "Government Area (LGA) and State/Territory (STE) level.\n"
+        "Areas are identified by a stable geo_code, not their name: a name can "
+        "drift across census years or be shared by two areas. To answer a "
+        "question about a place, first call find_geography to turn its name into "
+        "geo_code(s), then call query_census with those codes. To compare areas, "
+        "pass several geo_codes in a single query_census call.\n"
+        "Available levels: LGA (local government areas) and STE (states and "
+        "territories).\n\n"
+        "The database contains these exact categories and subcategories - always "
+        "use these EXACT values, never guess or paraphrase them:\n\n"
+        f"{db.schema_summary(config.DEFAULT_LEVEL)}\n\n"
+        "When comparing values across years or calculating growth/change, always "
         "use the calculate_change tool rather than computing the difference yourself."
     )
     return [{"type": "text", "text": text, "cache_control": {"type": "ephemeral"}}]

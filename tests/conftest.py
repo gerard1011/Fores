@@ -13,17 +13,59 @@ from httpx import ASGITransport, AsyncClient
 
 from api import config, db, limits
 
-ROWS = [
-    ("Boroondara", 2011, "population", "total", 159182),
-    ("Boroondara", 2016, "population", "total", 167232),
-    ("Boroondara", 2021, "population", "total", 167900),
-    ("Boroondara", 2011, "dwelling_structure", "separate house", 39000),
-    ("Boroondara", 2016, "dwelling_structure", "separate house", 39500),
-    ("Boroondara", 2021, "dwelling_structure", "separate house", 40100),
-    ("Boroondara", 2011, "dwelling_structure", "flat or apartment", 11000),
-    ("Boroondara", 2016, "dwelling_structure", "flat or apartment", 12500),
-    ("Boroondara", 2021, "dwelling_structure", "flat or apartment", 14200),
-]
+YEARS = (2011, 2016, 2021)
+
+
+def _boroondara_name(year: int) -> str:
+    # The name drift that makes geo_code, not geo_name, the cross-year key:
+    # 'Boroondara (C)' in the earlier censuses, 'Boroondara' in 2021.
+    return "Boroondara (C)" if year < 2021 else "Boroondara"
+
+
+def _rows() -> list[tuple]:
+    """A small multi-geography database exercising every path the app cares
+    about: two LGAs to compare, a same-name LGA pair in different states (to
+    lock the collision → state-append naming), three STEs, the Boroondara name
+    drift, and one area (Campbelltown NSW) that lacks dwelling_structure so the
+    empty-series case is reachable.
+
+    Columns: level, geo_code, geo_name, year, category, subcategory, value.
+    """
+    rows: list[tuple] = []
+
+    def add(level, geo_code, name, cat, sub, per_year):
+        for year, value in zip(YEARS, per_year):
+            nm = name(year) if callable(name) else name
+            rows.append((level, geo_code, nm, year, cat, sub, value))
+
+    # LGA Boroondara (Victoria) — drifting name, full category coverage.
+    add("LGA", "LGA21110", _boroondara_name, "population", "total", (159182, 167232, 167900))
+    add("LGA", "LGA21110", _boroondara_name, "dwelling_structure", "separate house", (39000, 39500, 40100))
+    add("LGA", "LGA21110", _boroondara_name, "dwelling_structure", "flat or apartment", (11000, 12500, 14200))
+
+    # LGA Stonnington (Victoria) — a second area to compare against.
+    add("LGA", "LGA22910", "Stonnington (C)", "population", "total", (103000, 110000, 116000))
+    add("LGA", "LGA22910", "Stonnington (C)", "dwelling_structure", "separate house", (20000, 20500, 21000))
+    add("LGA", "LGA22910", "Stonnington (C)", "dwelling_structure", "flat or apartment", (30000, 32000, 34000))
+
+    # Same display name, two states → must disambiguate by appending the state.
+    add("LGA", "LGA11500", "Campbelltown (C)", "population", "total", (150000, 158000, 175000))
+    add("LGA", "LGA40910", "Campbelltown (C)", "population", "total", (50000, 52000, 54000))
+
+    # STEs. South Australia is present so the digit-4 Campbelltown resolves its
+    # state name; NSW and Victoria carry full data for STE comparison paths.
+    add("STE", "1", "New South Wales", "population", "total", (6917657, 7480228, 8072163))
+    add("STE", "1", "New South Wales", "dwelling_structure", "separate house", (1000000, 1050000, 1100000))
+    add("STE", "1", "New South Wales", "dwelling_structure", "flat or apartment", (500000, 550000, 600000))
+    add("STE", "2", "Victoria", "population", "total", (5354043, 5926624, 6503491))
+    add("STE", "2", "Victoria", "dwelling_structure", "separate house", (900000, 950000, 1000000))
+    add("STE", "2", "Victoria", "dwelling_structure", "flat or apartment", (400000, 450000, 500000))
+    add("STE", "4", "South Australia", "population", "total", (1600000, 1670000, 1780000))
+
+    return rows
+
+
+ROWS = _rows()
 
 
 @pytest.fixture
@@ -32,16 +74,19 @@ def census_db(tmp_path, monkeypatch):
     conn = sqlite3.connect(path)
     conn.execute(
         "CREATE TABLE census_data ("
-        "lga TEXT, year INTEGER, category TEXT, subcategory TEXT, value INTEGER)"
+        "level TEXT, geo_code TEXT, geo_name TEXT, year INTEGER, "
+        "category TEXT, subcategory TEXT, value INTEGER)"
     )
-    conn.executemany("INSERT INTO census_data VALUES (?, ?, ?, ?, ?)", ROWS)
+    conn.executemany("INSERT INTO census_data VALUES (?, ?, ?, ?, ?, ?, ?)", ROWS)
     conn.commit()
     conn.close()
 
     monkeypatch.setattr(config, "DB_PATH", path)
     db._schema_cache.clear()
+    db._canonical_cache.clear()
     yield path
     db._schema_cache.clear()
+    db._canonical_cache.clear()
 
 
 @pytest.fixture(autouse=True)

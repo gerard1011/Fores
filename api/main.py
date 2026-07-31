@@ -60,8 +60,8 @@ async def lifespan(app: FastAPI):
     if not config.DB_PATH.exists():
         log.warning(
             "No census database at %s. It is gitignored and bind-mounted from "
-            "./data, so the build does not create it. Place "
-            "boroondara_census.db there or set CENSUS_DB_PATH.",
+            "./data, so the build does not create it. Place census.db there or "
+            "set CENSUS_DB_PATH.",
             config.DB_PATH,
         )
     else:
@@ -104,6 +104,15 @@ async def db_missing_handler(request: Request, exc: db.DatabaseMissing) -> JSONR
     )
 
 
+@app.exception_handler(db.BadRequest)
+async def bad_request_handler(request: Request, exc: db.BadRequest) -> JSONResponse:
+    # Unknown level or too many areas — caller error, not a server fault.
+    return JSONResponse(
+        status_code=400,
+        content=schemas.ErrorResponse(detail=str(exc), kind="bad_request").model_dump(),
+    )
+
+
 @app.get("/api/health")
 async def health() -> dict:
     return {
@@ -126,50 +135,90 @@ ERRORS = {
     429: {"model": schemas.ErrorResponse, "description": "Rate limited"},
     503: {"model": schemas.ErrorResponse, "description": "Dependency unavailable"},
 }
+BAD_REQUEST = {400: {"model": schemas.ErrorResponse, "description": "Unknown level or too many areas"}}
 NOT_FOUND = {404: {"model": schemas.ErrorResponse, "description": "Unknown category"}}
+
+
+@app.get(
+    "/api/datasets/census/levels",
+    response_model=list[schemas.Level],
+    responses=ERRORS,
+)
+async def levels(request: Request) -> list[dict]:
+    """The available granularities and how many areas each offers."""
+    await limiter.check_rate(client_ip(request), per_minute=config.CENSUS_PER_MINUTE)
+    return db.list_levels()
+
+
+@app.get(
+    "/api/datasets/census/geographies",
+    response_model=list[schemas.Geography],
+    responses={**ERRORS, **BAD_REQUEST},
+)
+async def geographies(
+    request: Request,
+    level: str = Query(default=config.DEFAULT_LEVEL),
+) -> list[dict]:
+    """The selectable areas at a level, backing the area picker."""
+    await limiter.check_rate(client_ip(request), per_minute=config.CENSUS_PER_MINUTE)
+    return db.list_geographies(level)
 
 
 @app.get(
     "/api/datasets/census/categories",
     response_model=list[schemas.Category],
-    responses=ERRORS,
+    responses={**ERRORS, **BAD_REQUEST},
 )
-async def categories(request: Request) -> list[dict]:
+async def categories(
+    request: Request,
+    level: str = Query(default=config.DEFAULT_LEVEL),
+) -> list[dict]:
     await limiter.check_rate(client_ip(request), per_minute=config.CENSUS_PER_MINUTE)
-    return db.list_categories()
+    return db.list_categories(level)
 
 
 @app.get(
     "/api/datasets/census/subcategories",
     response_model=list[schemas.SubcategoryRef],
-    responses=ERRORS,
+    responses={**ERRORS, **BAD_REQUEST},
 )
-async def subcategories(request: Request) -> list[dict]:
+async def subcategories(
+    request: Request,
+    level: str = Query(default=config.DEFAULT_LEVEL),
+) -> list[dict]:
     """Flat name index backing the explorer's search box."""
     await limiter.check_rate(client_ip(request), per_minute=config.CENSUS_PER_MINUTE)
-    return db.list_subcategories()
+    return db.list_subcategories(level)
 
 
 @app.get(
     "/api/datasets/census/series",
     response_model=schemas.CategorySeries,
-    responses={**ERRORS, **NOT_FOUND},
+    responses={**ERRORS, **BAD_REQUEST, **NOT_FOUND},
 )
 async def series(
     request: Request,
     category: str = Query(min_length=1),
+    level: str = Query(default=config.DEFAULT_LEVEL),
+    geo: list[str] = Query(min_length=1, max_length=config.MAX_GEO_CODES),
 ) -> dict:
+    """Compare one category across N areas. `geo` repeats, e.g.
+    `?category=population&level=STE&geo=1&geo=2`."""
     await limiter.check_rate(client_ip(request), per_minute=config.CENSUS_PER_MINUTE)
-    points = db.category_series(category)
-    if not points:
+    # An unknown category is a 404; a known category with no rows for the
+    # requested areas is a legitimate empty result, not a missing endpoint.
+    if not db.category_exists(category, level):
         return JSONResponse(
             status_code=404,
             content=schemas.ErrorResponse(
                 detail=f"No such category: {category}", kind="bad_request"
             ).model_dump(),
         )
+    points = db.category_series(category, level, geo)
     return {
         "category": category,
+        "level": level,
+        "geographies": db.resolve_geographies(level, geo),
         "years": sorted({p["year"] for p in points}),
         "points": points,
     }

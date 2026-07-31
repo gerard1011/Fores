@@ -21,6 +21,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/datasets/census/levels": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Levels
+         * @description The available granularities and how many areas each offers.
+         */
+        get: operations["levels_api_datasets_census_levels_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/datasets/census/geographies": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Geographies
+         * @description The selectable areas at a level, backing the area picker.
+         */
+        get: operations["geographies_api_datasets_census_geographies_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/datasets/census/categories": {
         parameters: {
             query?: never;
@@ -65,7 +105,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Series */
+        /**
+         * Series
+         * @description Compare one category across N areas. `geo` repeats, e.g.
+         *     `?category=population&level=STE&geo=1&geo=2`.
+         */
         get: operations["series_api_datasets_census_series_get"];
         put?: never;
         post?: never;
@@ -116,6 +160,13 @@ export interface components {
         CategorySeries: {
             /** Category */
             category: string;
+            /** Level */
+            level: string;
+            /**
+             * Geographies
+             * @description The areas echoed back, so the client can build the legend without a second call.
+             */
+            geographies: components["schemas"]["Geography"][];
             /**
              * Years
              * @description Sorted, so the chart can build its axis directly.
@@ -151,13 +202,46 @@ export interface components {
             /** Retry After */
             retry_after?: number | null;
         };
+        /** Geography */
+        Geography: {
+            /**
+             * Geo Code
+             * @description Stable cross-year identifier; passed back in /series.
+             */
+            geo_code: string;
+            /**
+             * Geo Name
+             * @description Canonical display name, unique within the level.
+             */
+            geo_name: string;
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
         };
+        /** Level */
+        Level: {
+            /**
+             * Level
+             * @description Geography granularity: 'LGA' or 'STE'.
+             */
+            level: string;
+            /**
+             * Area Count
+             * @description Areas at this level in the latest census year — the universe the picker offers.
+             */
+            area_count: number;
+        };
         /** SeriesPoint */
         SeriesPoint: {
+            /** Geo Code */
+            geo_code: string;
+            /**
+             * Geo Name
+             * @description Canonical name for the area, for the legend.
+             */
+            geo_name: string;
             /** Subcategory */
             subcategory: string;
             /** Year */
@@ -216,7 +300,7 @@ export interface operations {
             };
         };
     };
-    categories_api_datasets_census_categories_get: {
+    levels_api_datasets_census_levels_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -231,7 +315,123 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
+                    "application/json": components["schemas"]["Level"][];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Dependency unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    geographies_api_datasets_census_geographies_get: {
+        parameters: {
+            query?: {
+                level?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Geography"][];
+                };
+            };
+            /** @description Unknown level or too many areas */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Dependency unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    categories_api_datasets_census_categories_get: {
+        parameters: {
+            query?: {
+                level?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
                     "application/json": components["schemas"]["Category"][];
+                };
+            };
+            /** @description Unknown level or too many areas */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
             /** @description Rate limited */
@@ -256,7 +456,9 @@ export interface operations {
     };
     subcategories_api_datasets_census_subcategories_get: {
         parameters: {
-            query?: never;
+            query?: {
+                level?: string;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -270,6 +472,24 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SubcategoryRef"][];
+                };
+            };
+            /** @description Unknown level or too many areas */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
             /** @description Rate limited */
@@ -296,6 +516,8 @@ export interface operations {
         parameters: {
             query: {
                 category: string;
+                level?: string;
+                geo: string[];
             };
             header?: never;
             path?: never;
@@ -310,6 +532,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CategorySeries"];
+                };
+            };
+            /** @description Unknown level or too many areas */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
             /** @description Unknown category */
