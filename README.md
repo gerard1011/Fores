@@ -33,29 +33,35 @@ answer and the data behind it are on screen together.
 
 ## Prerequisites
 
-Two things are not in the repo and must be present before the app will work:
+One thing is not in the repo and must be present before the app will work:
 
 1. **`.env`** in the project root with `ANTHROPIC_API_KEY` set.
-2. **`data/boroondara_census.db`.** The database is gitignored and is *not*
-   built into the image — it is bind-mounted read-only from `./data`, so
-   refreshing it needs no rebuild. Note that `pipeline/boroondara.py` cannot
-   currently regenerate it: its input spreadsheet and output paths are
-   hardcoded to an absolute path on another machine. Until that is
-   parameterised, you need an existing copy of the `.db` file.
 
-   **The build must create this index on `census_data`:**
+The census database (`data/census.db`) **is** in the repo, tracked via
+[Git LFS](https://git-lfs.com). Install `git-lfs` before cloning (or run
+`git lfs install && git lfs pull` in an existing clone) so you get the real
+file rather than a small pointer. It is bind-mounted read-only into the
+container from `./data`, so refreshing the data needs no image rebuild.
 
-   ```sql
-   CREATE INDEX ix_levels ON census_data(level, year, geo_code);
-   ```
+Regenerating it from source is not yet automated: `pipeline/boroondara.py` has
+its input spreadsheet and output paths hardcoded to an absolute path on another
+machine. Until that is parameterised, treat the committed `.db` as the source
+of truth and refresh it by replacing the file (which updates the LFS object).
 
-   Without it, `/api/datasets/census/levels` does full-table `GROUP BY` and
-   `COUNT(DISTINCT geo_code)` scans. Those are cheap on a local disk but take
-   ~60s over the read-only bind mount on Docker Desktop (random I/O on an ~87 MB
-   file), and that endpoint is hit on every page load. The index makes both
-   queries index-only. `api.db.list_levels` also memoizes its result on the
-   file's mtime, which covers repeat loads, but the *first* load after any data
-   refresh or container restart still needs the index to be fast.
+**Any regenerated database must carry this index on `census_data`:**
+
+```sql
+CREATE INDEX ix_levels ON census_data(level, year, geo_code);
+```
+
+Without it, `/api/datasets/census/levels` does full-table `GROUP BY` and
+`COUNT(DISTINCT geo_code)` scans. Those are cheap on a local disk but take
+~60s over the read-only bind mount on Docker Desktop (random I/O on an ~87 MB
+file), and that endpoint is hit on every page load. The index makes both
+queries index-only. `api.db.list_levels` also memoizes its result on the
+file's mtime, which covers repeat loads, but the *first* load after any data
+refresh or container restart still needs the index to be fast. The committed
+database already has it.
 
 Without the key, the census endpoints still work and `/api/chat` returns 503.
 Without the database, both return 503 with an explanatory message rather than a
