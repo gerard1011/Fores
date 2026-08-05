@@ -1,9 +1,8 @@
 """The census agent.
 
-`stream_ask` is the real entry point: an async generator of typed events that
-the SSE endpoint forwards more or less verbatim. `ask` is a thin synchronous
-wrapper kept so the CLI below and the Streamlit app still work while the React
-frontend is being built.
+`stream_ask` is the entry point: an async generator of typed events that the
+SSE endpoint forwards more or less verbatim, consumed by the React frontend
+in `web/`.
 """
 
 import logging
@@ -321,26 +320,3 @@ async def stream_ask(messages: list[dict[str, Any]]) -> AsyncIterator[dict[str, 
     }
 
 
-def ask(question: str) -> str:
-    """Synchronous single-question helper.
-
-    Kept for the CLI below and the Streamlit app. Note it is genuinely
-    single-shot — no history — which is the limitation the streaming API
-    exists to fix.
-    """
-    import asyncio
-
-    async def _collect() -> str:
-        parts: list[str] = []
-        async for event in stream_ask([{"role": "user", "content": question}]):
-            if event["type"] == "text":
-                parts.append(event["text"])
-            elif event["type"] == "error":
-                raise RuntimeError(event["message"])
-        return "".join(parts)
-
-    return asyncio.run(_collect())
-
-
-if __name__ == "__main__":
-    print(ask("How did the number of separate houses change between 2016 and 2021?"))

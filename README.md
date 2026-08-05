@@ -3,15 +3,15 @@ Application that utilises agentic capabilites that provides companies with accur
 
 ## Census Data Pipeline
 
-Extracts ABS Census Time Series data (2011/2016/2021) for multiple Australian LGAs and states, 
-tracked via Git LFS.LGA from raw Excel spreadsheets into a structured SQLite database.
+Extracts ABS Census Time Series data (2011/2016/2021) (2011/2016/2021), covering multiple councils (LGAs) as well as states and
+territories into a structured SQLite database.
 
 ### What it does
 Parses 30+ ABS census tables (population, age, dwellings, income, etc.)
  Handles ABS's non-standard Excel layout (merged cells, multi-year 
   column blocks)
-Loads into a normalized `census_data` table: (lga, year, category, 
-  subcategory, value)
+Loads into a normalized `census_data` table: (level, geo_code,
+geo_name, category, subcategory, year, value)
 Idempotent safe to re-run without duplicating data
 
 ### Data source
