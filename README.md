@@ -3,8 +3,8 @@ Application that utilises agentic capabilites that provides companies with accur
 
 ## Census Data Pipeline
 
-Extracts ABS Census Time Series data (2011/2016/2021) for Boroondara LGA
-from raw Excel spreadsheets into a structured SQLite database.
+Extracts ABS Census Time Series data (2011/2016/2021) for multiple Australian LGAs and states, 
+tracked via Git LFS.LGA from raw Excel spreadsheets into a structured SQLite database.
 
 ### What it does
 Parses 30+ ABS census tables (population, age, dwellings, income, etc.)
